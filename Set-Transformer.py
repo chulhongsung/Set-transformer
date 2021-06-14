@@ -103,12 +103,20 @@ class MAB(K.layers.Layer):
         
         self.rff = K.layers.Dense(d_model)
 
-    def call(self, x):
-        Q, MHA, _ = self.mha(x, x)
+    def call(self, x, y):
+        Q, MHA, _ = self.mha(x, y)
         H = self.layernorm1(Q + MHA)
         MAB = self.layernorm2(H + self.rff(H))
         
         return MAB
+#%%
+class SAB(K.layers.Layer):
+    def __init__(self, d_model, num_heads):
+        super(SAB, self).__init__()
+        self.mab = MAB(d_model, num_heads)
+        
+    def call(self, x):
+        return self.mab(x, x)
 #%%
 class ISAB(K.layers.Layer):
     def __init__(self, m, d_model, num_heads):
@@ -126,3 +134,42 @@ class ISAB(K.layers.Layer):
         ISAB = self.mab2(x, H)
         
         return ISAB
+#%%
+class PMA(K.layers.layer):
+    def __init__(self, d_model, num_heads, k=1):
+        super(PMA, self).__init__()
+        self.S = tf.Variable(tf.keras.initializers.GlorotNormal()(shape=(1, k, d_model)))
+        self.mab = MAB(d_model, num_heads)
+        self.rff = K.layers.Dense(d_model)
+        
+    def forward(self, x):
+        return self.mab(self.S, self.rff(x))
+#%%
+class Encoder_ISAB(K.layers.Layer):
+    def __init__(self, m, d_model, num_heads):
+        super(Encoder_ISAB, self).__init__()
+        self.isab1 = ISAB(m, d_model, num_heads)
+        self.isab2 = ISAB(m, d_model, num_heads)
+        
+    def call(self, x):
+        return self.isab2(self.isab2(x))
+#%%
+class Decoder(K.layers.Layer):
+    def __init__(self, m, d_model, num_heads, k=1):
+        super(Decoder, self).__init__()
+        self.pma = PMA(d_model, num_heads, k=k)
+        self.sab = SAB(d_model, num_heads)
+        self.rff = K.layers.Dense(d_model)
+        
+    def call(self, x):
+        return self.rff(self.sab(self.pma(x)))
+    
+#%%
+class SetTransformer(K.models.Model):
+    def __init__(self, m, d_model, num_heads, k=1):
+        super(SetTransformer, self).__init__()
+        self.encoder = Encoder_ISAB(m, d_model, num_heads)
+        self.decoder = Decoder(m, d_model, num_heads, k=k)
+    
+    def call(self, x):
+        return self.decoder(self.encoder(x))
