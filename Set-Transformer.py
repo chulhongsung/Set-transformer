@@ -42,7 +42,7 @@ def scaled_dot_product_attention(q, k, v):
   
     scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
     
-    attention_weights =tf.reshape(tf.nn.softmax(scaled_attention_logits, axis=-1), [tf.shape(k)[0], tf.shape(k)[1], 1, tf.shape(q)[2]])
+    attention_weights =tf.nn.softmax(scaled_attention_logits, axis=-1)
   
     output = tf.matmul(attention_weights, v)  # (..., seq_len_q, depth_v)
 
@@ -62,7 +62,7 @@ class MultiHeadAttention(K.layers.Layer):
         self.wk = K.layers.Dense(d_model, kernel_regularizer=K.regularizers.l2(0.01))
         self.wv = K.layers.Dense(d_model, kernel_regularizer=K.regularizers.l2(0.01))
     
-        self.dense = layers.Dense(d_model)
+        self.dense = K.layers.Dense(d_model)
         
     def split_heads(self, x, batch_size):
         x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
@@ -135,7 +135,7 @@ class ISAB(K.layers.Layer):
         
         return ISAB
 #%%
-class PMA(K.layers.layer):
+class PMA(K.layers.Layer):
     def __init__(self, d_model, num_heads, k=1):
         super(PMA, self).__init__()
         self.S = tf.Variable(tf.keras.initializers.GlorotNormal()(shape=(1, k, d_model)))
@@ -152,7 +152,7 @@ class Encoder_ISAB(K.layers.Layer):
         self.isab2 = ISAB(m, d_model, num_heads)
         
     def call(self, x):
-        return self.isab2(self.isab2(x))
+        return self.isab2(self.isab1(x))
 #%%
 class Decoder(K.layers.Layer):
     def __init__(self, m, d_model, num_heads, k=1):
